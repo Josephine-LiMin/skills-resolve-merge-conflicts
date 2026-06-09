@@ -1,42 +1,40 @@
-# Secure Code Game
+# Secure Code Game 学习总结
+
+## 项目简介
+《Secure Code Game》是 GitHub Skills 提供的安全编程实践课程，通过修复真实代码漏洞和工作流配置问题，学习常见的软件安全风险及其防御方法。
 
 ## 一、核心知识点梳理
-《Secure Code Game》通过实战演练让我们识别和修复常见代码及工作流中的安全漏洞。主要知识点包括：
 1. **GitHub Actions 安全工作流 (Workflow Security)**：
    - 引入不信任的第三方 GitHub Actions 会增加软件供应链的攻击面（如恶意代码执行、敏感 Token 泄漏等）。
-   - 安全规范：对于简单任务应避免引入外部 Actions，转而使用行内脚本（Inline Scripts）；若必须使用，应限制权限，并使用 SHA-256 完整哈希值进行版本锁定。
-2. **浮点数精度与数值边界漏洞 (Float Precision and Underflow)**：
-   - 浮点数在计算机中采用二进制浮点数形式存储，会带来舍入误差（例如 `0.1 + 0.2 != 0.3`）与精度下溢风险。在金额极大的事务中，微小的扣减（如 `1e19 - 1000`）会被忽略，使得攻击者可以实现免费交易。
-   - 安全规范：在处理财务、交易等高精度数值计算时，必须使用高精度数据类型（如 Python 中的 `Decimal`，且实例化时应以字符串形式传入）；同时，必须对输入的商品价格、数量及总订单额设置合理的区间上限与下限限制。
+   - 安全规范：对于简单任务，可以考虑使用 Inline Script 减少外部依赖；若必须使用第三方 Actions，应审计源码、最小化权限，并使用 Commit SHA 精确锁定 Action 版本，避免 Tag 被篡改导致供应链攻击。
+2. **货币与金额处理的数值边界漏洞 (Float Precision and Underflow)**：
+   - 在处理货币和交易金额时，应避免使用浮点数，改用 Decimal 等高精度数值类型。这是因为浮点数的二进制存储特性会导致精度舍入误差与下溢风险，容易被攻击者利用构造大额反向支付绕过安全校验。
+   - 在接收输入时，除了选择正确的高精度数值类型外，还必须限制商品的单价、数量及总订单金额在合理的上下限范围内。
 3. **SQL 注入漏洞与参数化查询 (SQL Injection & Parameterized Statements)**：
-   - 将未经审查的用户输入直接通过字符串拼接（Concat）传入 SQL 语句中会导致 SQL 注入风险，使攻击者能够执行越权数据读取（SELECT）或恶意数据破坏（DROP TABLE）。
-   - 黑名单（Blocklist）字符过滤（如检测 `;`、`--` 等）在复杂的注入手段下极易被绕过，并非根本解决之道。
-   - 安全规范：必须使用预编译语句/参数化查询（Parameterized Queries），将逻辑结构与用户输入数据分离。对于设计上提供高自由度脚本执行的接口，应限制其操作类型（如仅允许 SELECT）。
+   - 动态拼接用户输入以构造 SQL 语句会导致严重的 SQL 注入风险。
+   - 安全规范：防御 SQL 注入的根本解决之道是使用参数化查询（Parameterized Queries），使数据库在编译时能清晰隔离执行逻辑与用户数据。依靠黑名单字符过滤（如检测分号、破折号等）非常脆弱，在实际开发中不可作为唯一防线。
 
 ## 二、学习中的难点
 1. **单元测试与安全防御的兼容性**：
-   - 在 Level 4 (Data Bank) 中，单元测试非常严格地校验了控制台输出中的 SQL 语句字符串（例如 `expected_output = "[QUERY] SELECT * FROM stocks WHERE symbol = 'MSFT'"`）。
-   - 直接使用参数化占位符（如 `SELECT * FROM stocks WHERE symbol = ?`）会改变执行的 SQL 并破坏了原始输出日志，导致原本用于常规功能测试的 Assert 报错失败。
-   - 难点在于如何在不修改单元测试校验逻辑的情况下完成底层执行的安全重构。我们通过在构造展示查询日志时保留原字符串格式，但在实际执行时提取前缀并采用参数化查询，从而完美兼顾了安全性与原有功能测试。
+   - 在 Level 4 (Data Bank) 中，单元测试硬编码校验了控制台输出中的 SQL 语句字符串。
+   - 若直接将 SQL 执行更改为纯参数化查询，会改变输出日志的文本结构，从而破坏原有功能性单元测试。
+   - 解决这一难点的关键在于，我们需要在构造输出日志时保持原样呈现，但在底层实际与 sqlite3 交互时提取参数并改用占位符安全执行，做到安全修复对现有业务日志的“零侵入”。
 2. **无 issue 引导的探索**：
-   - 相比于之前的 GitHub 技能课程，本课程不会在 Issues 页面发布分步说明。它需要开发者在本地直接浏览各 Season 及 Level 的目录，分析 vulnerable 源码（`code.*`）、Exploit 工具（`hack.*`）及单元测试（`tests.*`）来寻找解决方案。
+   - 相比于普通的 GitHub 技能课程，本课程不会在 Issues 页面发布分步引导说明。
+   - 学习者需要结合源码、测试代码、漏洞利用脚本和工作流配置文件进行分析，从攻击者（如何发起 Exploitation）与防御者（如何编写安全的 Remediation）两个角度去深入理解漏洞的形成原因及具体的修复方法。
 
 ## 三、实践操作与收获
 1. **实践步骤记录**：
-   - **Jarvis Gone Wrong 修复**：修改 `.github/workflows/jarvis-code.yml`，移除了存在潜在供应链风险的第三方 `dduzgun-security/secure-code-game-action` 步骤，改为更安全的 inline 状态查询：
-     ```yaml
-       - name: Check GitHub Status
-         run: |
-           STATUS=$(curl -s https://www.githubstatus.com/api/v2/status.json | jq -r '.status.description')
-           echo "GitHub Status: $STATUS"
-     ```
-     推送至 GitHub 触发 Actions，使得 `HACK - Jarvis Gone Wrong` 校验绿灯通过。
-   - **Season 1 Level 1 (Cyber Monday) 修复**：在 `code.py` 中引入 `from decimal import Decimal`，将所有的金额加减操作转为 `Decimal` 运算，并限制 item 的 amount 和 quantity 不得超过预设的最大值，规避了浮点数下溢漏洞，使 `hack.py` 验证通过。
-   - **Season 1 Level 4 (Data Bank) 修复**：重写了 `DB_CRUD_ops` 类中的 5 个数据库操作方法。对 `get_stock_price` 和 `update_stock_price` 提取了字母数字安全前缀，使用参数化占位符 `?` 替代拼接注入；对 `exec_multi_query` 和 `exec_user_script` 进行了黑名单检查（禁止 DROP/UPDATE/DELETE 等关键字），确保仅限只读，最终跑通了所有的 unit tests 和 hack 校验。
+   - **Jarvis Gone Wrong 修复**：修改 `.github/workflows/jarvis-code.yml`，移除了调用第三方 Action 的步骤，改为使用符合安全规范的 inline curl 状态查询直接获取 GitHub 状态服务结果，并提交推送通过了 `HACK - Jarvis Gone Wrong` 校验。
+   - **Season 1 Level 1 (Cyber Monday) 修复**：重构 `code.py` 中的金额结算逻辑，将整型和浮点型计算重构为高精度的 `Decimal` 类型，同时限制商品单价、数量不得超过设定上限，规避了由于浮点数下溢引起的免费交易漏洞。
+   - **Season 1 Level 4 (Data Bank) 修复**：
+     - 对 `get_stock_price` 和 `update_stock_price` 使用参数化查询替代字符串拼接；
+     - 对设计上允许执行用户脚本的接口（如 `exec_multi_query` 和 `exec_user_script`），根据题目要求限制其执行范围，仅允许只读查询（SELECT），从业务层面降低风险；
+     - 调整后成功通过了全部功能性单元测试（`tests.py`）以及黑客攻击测试（`hack.py`）。
 2. **收获**：
-   - 学会了防范软件供应链攻击，并理解了第三方 GitHub Actions 的危害和审计锁定哈希的必要性。
-   - 掌握了防范 SQL 注入、浮点数溢出与逻辑越权的基本开发规范，加深了对于防御性编程（Defensive Programming）的认识。
+   - 深刻体会到了攻击者视角的分析方法对于防御性编程的重大指导意义。
+   - 掌握了在 GitHub Actions 中处理依赖管理与凭证锁定的实战安全规范。
 
 ## 四、学习遇到的困惑与疑问
-1. **安全日志输出的合规风险**：在 Level 4 修复中，为了让测试通过，代码中仍打印了包含未经过滤的用户输入的 SQL 日志。在企业级生产环境中，此类敏感操作或原始数据打印是否会带来潜在的日志注入（Log Injection）或敏感信息泄漏风险？
-2. **多源多依赖工作流审计**：当项目规模变大，包含上百个自定义 Actions 时，如何自动化审计每个 Actions 的 SHA 锁定以及安全权限，是否存在专门的 CI 插件工具来阻断未被审计的 Actions 提交。
+1. **安全日志输出的合规风险**：在 Level 4 的修复中，为了兼容原有测试，代码中依然打印了包含未经过滤的用户输入的 SQL 日志。在真实的生产系统中，这种做法是否会带来潜在的日志注入（Log Injection）、敏感信息泄漏或审计日志污染的风险？应当如何安全地进行 SQL 调试与日志留档？
+2. **多源多依赖工作流审计**：在大型企业级 CI/CD 工作流中，如果存在成百上千个 Action 引用，手动维护 Commit SHA 锁定非常繁琐。是否存在成熟的自动化静态分析工具（例如 Linter）可以在 PR 阶段自动审计未锁定 SHA 的 Action 提交，并推荐安全的替换方案？
